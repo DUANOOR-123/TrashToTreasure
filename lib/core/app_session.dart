@@ -14,6 +14,7 @@ class AppSession {
 
   static UserRole role = UserRole.both;
   static bool isGuest = false;
+  static String? authToken;
 
   /// Shown on greetings / profile when you connect real accounts.
   static String userName = 'Ayesha Khan';
@@ -34,12 +35,14 @@ class AppSession {
   static void startGuest() {
     isGuest = true;
     role = UserRole.buyer;
+    authToken = null;
   }
 
   /// Log out: forget everything.
   static void reset() {
     isGuest = false;
     role = UserRole.both;
+    authToken = null;
   }
 
   /// Turns the text value from the Choose Role screen into a [UserRole].

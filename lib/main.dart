@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'services/api_service.dart';
 
 import 'package:trash2treasure/core/app_theme.dart';
 import 'package:trash2treasure/dev/screen_menu.dart';
@@ -9,6 +10,14 @@ import 'package:trash2treasure/screens/auth/splash_screen.dart';
 const bool kShowScreenMenu = false;
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  ApiService.checkHealth().then((data) {
+    debugPrint("BACKEND RESPONSE: $data");
+  }).catchError((error) {
+    debugPrint("BACKEND CONNECTION ERROR: $error");
+  });
+
   runApp(const MyApp());
 }
 
