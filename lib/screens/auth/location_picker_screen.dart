@@ -6,6 +6,9 @@ import 'package:geolocator/geolocator.dart';
 
 import 'package:trash2treasure/screens/auth/submit_id_screen.dart';
 
+import 'package:trash2treasure/core/app_session.dart';
+import 'package:trash2treasure/services/api_service.dart';
+
 class LocationPickerScreen extends StatefulWidget {
   const LocationPickerScreen({super.key});
   @override
@@ -17,6 +20,8 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   LatLng _pos = const LatLng(33.6844, 73.0479);
   bool _loading = true;
 
+  bool _hasRealLocation = false;
+
   @override
   void initState() {
     super.initState();
@@ -24,30 +29,56 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   }
 
   Future<void> _getRealLocation() async {
-    var perm = await Geolocator.checkPermission();
-    if (perm == LocationPermission.denied) {
-      perm = await Geolocator.requestPermission();
-    }
-    if (perm == LocationPermission.whileInUse ||
-        perm == LocationPermission.always) {
-      try {
-        Position p = await Geolocator.getCurrentPosition(
-          locationSettings: const LocationSettings(
-            accuracy: LocationAccuracy.high,
-          ),
-        );
+    try {
+      // Check whether phone location services are enabled
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+
+      if (!serviceEnabled) {
         if (mounted) {
-          setState(() {
-            _pos = LatLng(p.latitude, p.longitude);
-            _loading = false;
-          });
-          _mapController.move(_pos, 15);
+          setState(() => _loading = false);
         }
-      } catch (_) {
+        return;
+      }
+
+      // Check location permission
+      LocationPermission permission = await Geolocator.checkPermission();
+
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        if (mounted) {
+          setState(() => _loading = false);
+        }
+        return;
+      }
+
+      // Get actual device location
+      Position p = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 20),
+        ),
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _pos = LatLng(p.latitude, p.longitude);
+        _hasRealLocation = true;
+        _loading = false;
+      });
+
+      // Do not move the map controller here.
+      // The map has not necessarily been initialized yet.
+    } catch (e) {
+      debugPrint("Location error: $e");
+
+      if (mounted) {
         setState(() => _loading = false);
       }
-    } else {
-      setState(() => _loading = false);
     }
   }
 
@@ -56,6 +87,46 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
       context,
       MaterialPageRoute(builder: (_) => const SubmitIdScreen()),
     );
+  }
+
+  Future<void> _saveLocationAndContinue() async {
+    final token = AppSession.authToken;
+
+    if (token == null || token.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Please sign in again."),
+        ),
+      );
+      return;
+    }
+
+    if (!_hasRealLocation) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Please allow location access first."),
+        ),
+      );
+      return;
+    }
+
+    try {
+      await ApiService.updateLocation(
+        latitude: _pos.latitude,
+        longitude: _pos.longitude,
+        token: token,
+      );
+
+      if (!mounted) return;
+
+      _goToSubmitId();
+    } catch (error) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.toString())),
+      );
+    }
   }
 
   @override
@@ -133,14 +204,23 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                             mapController: _mapController,
                             options: MapOptions(
                               initialCenter: _pos,
-                              initialZoom: 14,
+                              initialZoom: 15,
+
+                              // Move the map only after it is initialized.
+                              onMapReady: () {
+                                _mapController.move(_pos, 15);
+                              },
+
                               interactionOptions: const InteractionOptions(
                                 flags: InteractiveFlag.all,
                               ),
                             ),
                             children: [
                               TileLayer(
-                                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                                urlTemplate:
+                                    'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                                userAgentPackageName:
+                                    'com.example.trash2treasure',
                               ),
                               MarkerLayer(
                                 markers: [
@@ -179,7 +259,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                   height: 46,
                   child: ElevatedButton(
                     onPressed:
-                        _goToSubmitId, // <-- EDITED: Now goes to next screen
+                        _saveLocationAndContinue, // <-- EDITED: Now goes to next screen
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF1F7A3A),
                       elevation: 0,

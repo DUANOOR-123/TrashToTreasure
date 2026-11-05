@@ -23,6 +23,15 @@ class _SignupScreenState extends State<SignupScreen> {
 
   final TextEditingController passwordController = TextEditingController();
 
+  // Email validation
+  bool isValidEmail(String email) {
+    final emailRegex = RegExp(
+      r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$',
+    );
+
+    return emailRegex.hasMatch(email);
+  }
+
   // Reusable text field
   Widget _field(
     String h, {
@@ -68,6 +77,16 @@ class _SignupScreenState extends State<SignupScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text("Please fill all fields"),
+        ),
+      );
+      return;
+    }
+
+    // Validate email address
+    if (!isValidEmail(contact)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Please enter a valid email address"),
         ),
       );
       return;
@@ -180,7 +199,7 @@ class _SignupScreenState extends State<SignupScreen> {
                 ),
                 const SizedBox(height: 12),
                 _field(
-                  "Email or Phone Number",
+                  "Email Address",
                   controller: contactController,
                 ),
                 const SizedBox(height: 12),
